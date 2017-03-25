@@ -17,7 +17,6 @@ class Loader:
     """
     def __init__(self, master):
         self.master = master
-        self.boot_into_addon = None
 
     def add_option(
         self,
@@ -34,12 +33,6 @@ class Loader:
             help,
             choices
         )
-
-    def boot_into(self, addon):
-        self.boot_into_addon = addon
-        func = getattr(addon, "load", None)
-        if func:
-            func(self)
 
 
 class AddonManager:
@@ -81,8 +74,6 @@ class AddonManager:
         """
         l = Loader(self.master)
         self.invoke_addon(addon, "load", l)
-        if l.boot_into_addon:
-            addon = l.boot_into_addon
         name = _get_name(addon)
         if name in self.lookup:
             raise exceptions.AddonError(

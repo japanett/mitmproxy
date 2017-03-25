@@ -36,19 +36,6 @@ class AOption:
         l.add_option("custom_option", bool, False, "help")
 
 
-class AChain:
-    def __init__(self, name, next):
-        self.name = name
-        self.next = next
-
-    def load(self, l):
-        if self.next:
-            l.boot_into(self.next)
-
-    def __repr__(self):
-        return "<%s>" % self.name
-
-
 def test_halt():
     o = options.Options()
     m = master.Master(o, proxy.DummyServer(o))
@@ -119,34 +106,6 @@ def test_load_option():
     a = addonmanager.AddonManager(m)
     a.add(AOption())
     assert "custom_option" in m.options._options
-
-
-def test_loadchain():
-    o = options.Options()
-    m = master.Master(o, proxy.DummyServer(o))
-    a = addonmanager.AddonManager(m)
-
-    a.add(AChain("one", None))
-    assert a.get("one")
-    a.clear()
-
-    a.add(AChain("one", AChain("two", None)))
-    assert not a.get("one")
-    assert a.get("two")
-    a.clear()
-
-    a.add(AChain("one", AChain("two", AChain("three", None))))
-    assert not a.get("one")
-    assert not a.get("two")
-    assert a.get("three")
-    a.clear()
-
-    a.add(AChain("one", AChain("two", AChain("three", AChain("four", None)))))
-    assert not a.get("one")
-    assert not a.get("two")
-    assert not a.get("three")
-    assert a.get("four")
-    a.clear()
 
 
 def test_nesting():
