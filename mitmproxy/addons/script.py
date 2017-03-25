@@ -1,8 +1,5 @@
-import contextlib
 import os
-import sys
 import threading
-import traceback
 import types
 
 from mitmproxy import addonmanager
@@ -12,61 +9,6 @@ from mitmproxy import eventsequence
 
 import watchdog.events
 from watchdog.observers import polling
-
-
-def cut_traceback(tb, func_name):
-    """
-    Cut off a traceback at the function with the given name.
-    The func_name's frame is excluded.
-
-    Args:
-        tb: traceback object, as returned by sys.exc_info()[2]
-        func_name: function name
-
-    Returns:
-        Reduced traceback.
-    """
-    tb_orig = tb
-
-    for _, _, fname, _ in traceback.extract_tb(tb):
-        tb = tb.tb_next
-        if fname == func_name:
-            break
-
-    if tb is None:
-        # We could not find the method, take the full stack trace.
-        # This may happen on some Python interpreters/flavors (e.g. PyInstaller).
-        return tb_orig
-    else:
-        return tb
-
-
-class StreamLog:
-    """
-        A class for redirecting output using contextlib.
-    """
-    def __init__(self, log):
-        self.log = log
-
-    def write(self, buf):
-        if buf.strip():
-            self.log(buf)
-
-
-@contextlib.contextmanager
-def scriptenv():
-    stdout_replacement = StreamLog(ctx.log.warn)
-    try:
-        with contextlib.redirect_stdout(stdout_replacement):
-            yield
-    except Exception:
-        etype, value, tb = sys.exc_info()
-        tb = cut_traceback(tb, "scriptenv").tb_next
-        ctx.log.error(
-            "Script error: %s" % "".join(
-                traceback.format_exception(etype, value, tb)
-            )
-        )
 
 
 def load_script(path):
@@ -81,9 +23,12 @@ def load_script(path):
             )
             return
     ns = {'__file__': os.path.abspath(path)}
-    with scriptenv():
+    with addonmanager.safecall(propagate=False):
         exec(code, ns)
-    return types.SimpleNamespace(**ns)
+    ns = types.SimpleNamespace(**ns)
+    if not getattr(ns, "name", None):
+        ns.name = path
+    return ns
 
 
 class ReloadHandler(watchdog.events.FileSystemEventHandler):
@@ -116,7 +61,7 @@ class Script:
         An addon that manages a single script.
     """
     def __init__(self, path):
-        self.name = path
+        self.name = "reloader:" + path
         self.path = path
         self.ns = None
         self.observer = None
@@ -124,16 +69,10 @@ class Script:
 
         self.last_options = None
         self.should_reload = threading.Event()
+        self.load_script()
 
-        for i in eventsequence.Events:
-            if not hasattr(self, i):
-                def mkprox():
-                    evt = i
-
-                    def prox(*args, **kwargs):
-                        self.run(evt, *args, **kwargs)
-                    return prox
-                setattr(self, i, mkprox())
+    def load_script(self):
+        self.ns = load_script(self.path)
 
     @property
     def addons(self):
@@ -141,35 +80,17 @@ class Script:
             return [self.ns]
         return []
 
-    def run(self, name, *args, **kwargs):
-        # It's possible for ns to be un-initialised if we failed during
-        # configure
-        if self.ns is not None and not self.dead:
-            func = getattr(self.ns, name, None)
-            if func:
-                with scriptenv():
-                    return func(*args, **kwargs)
-
     def reload(self):
         self.should_reload.set()
-
-    def load_script(self):
-        self.ns = load_script(self.path)
-        l = addonmanager.Loader(ctx.master)
-        self.run("load", l)
 
     def tick(self):
         if self.should_reload.is_set():
             self.should_reload.clear()
             ctx.log.info("Reloading script: %s" % self.name)
+            if self.ns:
+                self.addons.remove(self.ns)
             self.ns = load_script(self.path)
             self.configure(self.last_options, self.last_options.keys())
-        else:
-            self.run("tick")
-
-    def load(self, l):
-        self.last_options = ctx.master.options
-        self.load_script()
 
     def configure(self, options, updated):
         self.last_options = options
@@ -181,10 +102,8 @@ class Script:
                 os.path.dirname(self.path) or "."
             )
             self.observer.start()
-        self.run("configure", options, updated)
 
     def done(self):
-        self.run("done")
         self.dead = True
 
 
