@@ -23,7 +23,4 @@ class Injector:
             flow.response.content = str(html).encode("utf8")
 
 
-def load(l):
-    if len(sys.argv) != 2:
-        raise ValueError('Usage: -s "iframe_injector.py url"')
-    return l.boot_into(Injector(sys.argv[1]))
+addons = [Injector(sys.argv[1])]

@@ -7,7 +7,7 @@ import sys
 class CallLogger:
     call_log = []
 
-    def __init__(self, name = "solo"):
+    def __init__(self, name = "recorder"):
         self.name = name
 
     def __getattr__(self, attr):
@@ -22,5 +22,4 @@ class CallLogger:
         raise AttributeError
 
 
-def load(l):
-    l.boot_into(CallLogger(*sys.argv[1:]))
+addons = [CallLogger(*sys.argv[1:])]

@@ -1,6 +1,5 @@
 import contextlib
 import os
-import shlex
 import sys
 import threading
 import traceback
@@ -11,32 +10,8 @@ from mitmproxy import exceptions
 from mitmproxy import ctx
 from mitmproxy import eventsequence
 
-
 import watchdog.events
 from watchdog.observers import polling
-
-
-def parse_command(command):
-    """
-        Returns a (path, args) tuple.
-    """
-    if not command or not command.strip():
-        raise ValueError("Empty script command.")
-    # Windows: escape all backslashes in the path.
-    if os.name == "nt":  # pragma: no cover
-        backslashes = shlex.split(command, posix=False)[0].count("\\")
-        command = command.replace("\\", "\\\\", backslashes)
-    args = shlex.split(command)  # pragma: no cover
-    args[0] = os.path.expanduser(args[0])
-    if not os.path.exists(args[0]):
-        raise ValueError(
-            ("Script file not found: %s.\r\n"
-             "If your script path contains spaces, "
-             "make sure to wrap it in additional quotes, e.g. -s \"'./foo bar/baz.py' --args\".") %
-            args[0])
-    elif os.path.isdir(args[0]):
-        raise ValueError("Not a file: %s" % args[0])
-    return args[0], args[1:]
 
 
 def cut_traceback(tb, func_name):
@@ -79,17 +54,11 @@ class StreamLog:
 
 
 @contextlib.contextmanager
-def scriptenv(path, args):
-    oldargs = sys.argv
-    sys.argv = [path] + args
-    script_dir = os.path.dirname(os.path.abspath(path))
-    sys.path.append(script_dir)
+def scriptenv():
     stdout_replacement = StreamLog(ctx.log.warn)
     try:
         with contextlib.redirect_stdout(stdout_replacement):
             yield
-    except SystemExit as v:
-        ctx.log.error("Script exited with code %s" % v.code)
     except Exception:
         etype, value, tb = sys.exc_info()
         tb = cut_traceback(tb, "scriptenv").tb_next
@@ -98,12 +67,9 @@ def scriptenv(path, args):
                 traceback.format_exception(etype, value, tb)
             )
         )
-    finally:
-        sys.argv = oldargs
-        sys.path.pop()
 
 
-def load_script(path, args):
+def load_script(path):
     with open(path, "rb") as f:
         try:
             code = compile(f.read(), path, 'exec')
@@ -115,7 +81,7 @@ def load_script(path, args):
             )
             return
     ns = {'__file__': os.path.abspath(path)}
-    with scriptenv(path, args):
+    with scriptenv():
         exec(code, ns)
     return types.SimpleNamespace(**ns)
 
@@ -149,11 +115,9 @@ class Script:
     """
         An addon that manages a single script.
     """
-    def __init__(self, command):
-        self.name = command
-
-        self.command = command
-        self.path, self.args = parse_command(command)
+    def __init__(self, path):
+        self.name = path
+        self.path = path
         self.ns = None
         self.observer = None
         self.dead = False
@@ -171,30 +135,34 @@ class Script:
                     return prox
                 setattr(self, i, mkprox())
 
+    @property
+    def addons(self):
+        if self.ns is not None and not self.dead:
+            return [self.ns]
+        return []
+
     def run(self, name, *args, **kwargs):
         # It's possible for ns to be un-initialised if we failed during
         # configure
         if self.ns is not None and not self.dead:
             func = getattr(self.ns, name, None)
             if func:
-                with scriptenv(self.path, self.args):
+                with scriptenv():
                     return func(*args, **kwargs)
 
     def reload(self):
         self.should_reload.set()
 
     def load_script(self):
-        self.ns = load_script(self.path, self.args)
+        self.ns = load_script(self.path)
         l = addonmanager.Loader(ctx.master)
         self.run("load", l)
-        if l.boot_into_addon:
-            self.ns = l.boot_into_addon
 
     def tick(self):
         if self.should_reload.is_set():
             self.should_reload.clear()
             ctx.log.info("Reloading script: %s" % self.name)
-            self.ns = load_script(self.path, self.args)
+            self.ns = load_script(self.path)
             self.configure(self.last_options, self.last_options.keys())
         else:
             self.run("tick")

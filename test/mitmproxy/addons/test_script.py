@@ -105,7 +105,7 @@ def test_load_script():
                 "mitmproxy/data/addonscripts/recorder.py"
             ), []
         )
-        assert ns.load
+        assert ns.addons
 
 
 def test_script_print_stdout():
@@ -123,21 +123,23 @@ def test_script_print_stdout():
 
 class TestScript:
     def test_simple(self):
-        with taddons.context():
+        with taddons.context() as tctx:
             sc = script.Script(
                 tutils.test_data.path(
                     "mitmproxy/data/addonscripts/recorder.py"
                 )
             )
             sc.load_script()
-            assert sc.ns.call_log[0][0:2] == ("solo", "load")
 
-            sc.ns.call_log = []
+            rec = sc.addons[0]
+
+            assert rec.call_log[0][0:2] == ("solo", "load")
+
+            rec.call_log = []
             f = tflow.tflow(resp=True)
             sc.request(f)
 
-            recf = sc.ns.call_log[0]
-            assert recf[1] == "request"
+            assert rec.call_log[0][1] == "request"
 
     def test_reload(self, tmpdir):
         with taddons.context() as tctx:
