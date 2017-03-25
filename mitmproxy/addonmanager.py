@@ -1,4 +1,7 @@
 import typing
+import traceback
+import contextlib
+import sys
 
 from mitmproxy import exceptions
 from mitmproxy import eventsequence
@@ -9,6 +12,61 @@ import pprint
 
 def _get_name(itm):
     return getattr(itm, "name", itm.__class__.__name__.lower())
+
+
+def cut_traceback(tb, func_name):
+    """
+    Cut off a traceback at the function with the given name.
+    The func_name's frame is excluded.
+
+    Args:
+        tb: traceback object, as returned by sys.exc_info()[2]
+        func_name: function name
+
+    Returns:
+        Reduced traceback.
+    """
+    tb_orig = tb
+
+    for _, _, fname, _ in traceback.extract_tb(tb):
+        tb = tb.tb_next
+        if fname == func_name:
+            break
+
+    if tb is None:
+        # We could not find the method, take the full stack trace.
+        # This may happen on some Python interpreters/flavors (e.g. PyInstaller).
+        return tb_orig
+    else:
+        return tb
+
+
+class StreamLog:
+    """
+        A class for redirecting output using contextlib.
+    """
+    def __init__(self, log):
+        self.log = log
+
+    def write(self, buf):
+        if buf.strip():
+            self.log(buf)
+
+
+@contextlib.contextmanager
+def safecall(propagate):
+    stdout_replacement = StreamLog(ctx.log.warn)
+    try:
+        with contextlib.redirect_stdout(stdout_replacement):
+            yield
+    except Exception:
+        etype, value, tb = sys.exc_info()
+        tb = cut_traceback(tb, "scriptenv").tb_next
+        ctx.log.error(
+            "Addon error: %s" % "".join(
+                traceback.format_exception(etype, value, tb)
+            )
+        )
 
 
 class Loader:

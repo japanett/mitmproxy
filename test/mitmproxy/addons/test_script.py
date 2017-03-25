@@ -22,12 +22,8 @@ from ...conftest import skip_not_windows
 
 def test_scriptenv():
     with taddons.context() as tctx:
-        with script.scriptenv("path", []):
-            raise SystemExit
-        assert tctx.master.has_log("exited", "error")
-
         tctx.master.clear()
-        with script.scriptenv("path", []):
+        with script.scriptenv():
             raise ValueError("fooo")
         assert tctx.master.has_log("fooo", "error")
 
@@ -60,50 +56,12 @@ def test_reloadhandler():
     assert rh.callback.called
 
 
-class TestParseCommand:
-    def test_empty_command(self):
-        with pytest.raises(ValueError):
-            script.parse_command("")
-
-        with pytest.raises(ValueError):
-            script.parse_command("  ")
-
-    def test_no_script_file(self, tmpdir):
-        with pytest.raises(Exception, match="not found"):
-            script.parse_command("notfound")
-
-        with pytest.raises(Exception, match="Not a file"):
-            script.parse_command(str(tmpdir))
-
-    def test_parse_args(self):
-        with utils.chdir(tutils.test_data.dirname):
-            assert script.parse_command(
-                "mitmproxy/data/addonscripts/recorder.py"
-            ) == ("mitmproxy/data/addonscripts/recorder.py", [])
-            assert script.parse_command(
-                "mitmproxy/data/addonscripts/recorder.py foo bar"
-            ) == ("mitmproxy/data/addonscripts/recorder.py", ["foo", "bar"])
-            assert script.parse_command(
-                "mitmproxy/data/addonscripts/recorder.py 'foo bar'"
-            ) == ("mitmproxy/data/addonscripts/recorder.py", ["foo bar"])
-
-    @skip_not_windows
-    def test_parse_windows(self):
-        with utils.chdir(tutils.test_data.dirname):
-            assert script.parse_command(
-                "mitmproxy/data\\addonscripts\\recorder.py"
-            ) == ("mitmproxy/data\\addonscripts\\recorder.py", [])
-            assert script.parse_command(
-                "mitmproxy/data\\addonscripts\\recorder.py 'foo \\ bar'"
-            ) == ("mitmproxy/data\\addonscripts\\recorder.py", ['foo \\ bar'])
-
-
 def test_load_script():
     with taddons.context():
         ns = script.load_script(
             tutils.test_data.path(
                 "mitmproxy/data/addonscripts/recorder.py"
-            ), []
+            )
         )
         assert ns.addons
 
@@ -111,11 +69,11 @@ def test_load_script():
 def test_script_print_stdout():
     with taddons.context() as tctx:
         with mock.patch('mitmproxy.ctx.log.warn') as mock_warn:
-            with script.scriptenv("path", []):
+            with script.scriptenv():
                 ns = script.load_script(
                     tutils.test_data.path(
                         "mitmproxy/data/addonscripts/print.py"
-                    ), []
+                    )
                 )
                 ns.load(addonmanager.Loader(tctx.master))
         mock_warn.assert_called_once_with("stdoutprint")
@@ -129,15 +87,15 @@ class TestScript:
                     "mitmproxy/data/addonscripts/recorder.py"
                 )
             )
-            sc.load_script()
+            tctx.master.addons.add(sc)
 
-            rec = sc.addons[0]
+            rec = tctx.master.addons.get("recorder")
 
-            assert rec.call_log[0][0:2] == ("solo", "load")
+            assert rec.call_log[0][0:2] == ("recorder", "load")
 
             rec.call_log = []
             f = tflow.tflow(resp=True)
-            sc.request(f)
+            tctx.master.addons.trigger("request", f)
 
             assert rec.call_log[0][1] == "request"
 
