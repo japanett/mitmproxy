@@ -1,89 +1,28 @@
-import contextlib
 import os
-import sys
+import importlib
 import threading
-import traceback
-import types
+import sys
 
 from mitmproxy import addonmanager
 from mitmproxy import exceptions
 from mitmproxy import ctx
-from mitmproxy import eventsequence
 
 import watchdog.events
 from watchdog.observers import polling
 
 
-def cut_traceback(tb, func_name):
-    """
-    Cut off a traceback at the function with the given name.
-    The func_name's frame is excluded.
-
-    Args:
-        tb: traceback object, as returned by sys.exc_info()[2]
-        func_name: function name
-
-    Returns:
-        Reduced traceback.
-    """
-    tb_orig = tb
-
-    for _, _, fname, _ in traceback.extract_tb(tb):
-        tb = tb.tb_next
-        if fname == func_name:
-            break
-
-    if tb is None:
-        # We could not find the method, take the full stack trace.
-        # This may happen on some Python interpreters/flavors (e.g. PyInstaller).
-        return tb_orig
-    else:
-        return tb
-
-
-class StreamLog:
-    """
-        A class for redirecting output using contextlib.
-    """
-    def __init__(self, log):
-        self.log = log
-
-    def write(self, buf):
-        if buf.strip():
-            self.log(buf)
-
-
-@contextlib.contextmanager
-def scriptenv():
-    stdout_replacement = StreamLog(ctx.log.warn)
-    try:
-        with contextlib.redirect_stdout(stdout_replacement):
-            yield
-    except Exception:
-        etype, value, tb = sys.exc_info()
-        tb = cut_traceback(tb, "scriptenv").tb_next
-        ctx.log.error(
-            "Script error: %s" % "".join(
-                traceback.format_exception(etype, value, tb)
-            )
-        )
-
-
 def load_script(path):
-    with open(path, "rb") as f:
-        try:
-            code = compile(f.read(), path, 'exec')
-        except SyntaxError as e:
-            ctx.log.error(
-                "Script error: %s line %s: %s" % (
-                    e.filename, e.lineno, e.msg
-                )
-            )
-            return
-    ns = {'__file__': os.path.abspath(path)}
-    with scriptenv():
-        exec(code, ns)
-    return types.SimpleNamespace(**ns)
+    loader = importlib.machinery.SourceFileLoader(os.path.basename(path), path)
+    try:
+        oldpath = sys.path
+        sys.path.insert(0, os.path.dirname(path))
+        with addonmanager.safecall(propagate=False):
+            m = loader.load_module()
+            if not getattr(m, "name", None):
+                m.name = path
+            return m
+    finally:
+        sys.path[:] = oldpath
 
 
 class ReloadHandler(watchdog.events.FileSystemEventHandler):
@@ -116,7 +55,7 @@ class Script:
         An addon that manages a single script.
     """
     def __init__(self, path):
-        self.name = path
+        self.name = "scriptmanager:" + path
         self.path = path
         self.ns = None
         self.observer = None
@@ -125,15 +64,11 @@ class Script:
         self.last_options = None
         self.should_reload = threading.Event()
 
-        for i in eventsequence.Events:
-            if not hasattr(self, i):
-                def mkprox():
-                    evt = i
-
-                    def prox(*args, **kwargs):
-                        self.run(evt, *args, **kwargs)
-                    return prox
-                setattr(self, i, mkprox())
+    def load(self, l):
+        try:
+            self.ns = load_script(self.path)
+        except FileNotFoundError:
+            ctx.log("%s: file not found." % self.path)
 
     @property
     def addons(self):
@@ -141,35 +76,18 @@ class Script:
             return [self.ns]
         return []
 
-    def run(self, name, *args, **kwargs):
-        # It's possible for ns to be un-initialised if we failed during
-        # configure
-        if self.ns is not None and not self.dead:
-            func = getattr(self.ns, name, None)
-            if func:
-                with scriptenv():
-                    return func(*args, **kwargs)
-
     def reload(self):
         self.should_reload.set()
-
-    def load_script(self):
-        self.ns = load_script(self.path)
-        l = addonmanager.Loader(ctx.master)
-        self.run("load", l)
 
     def tick(self):
         if self.should_reload.is_set():
             self.should_reload.clear()
             ctx.log.info("Reloading script: %s" % self.name)
+            if self.ns:
+                self.addons.remove(self.ns)
             self.ns = load_script(self.path)
+            ctx.master.addons.register(self.ns)
             self.configure(self.last_options, self.last_options.keys())
-        else:
-            self.run("tick")
-
-    def load(self, l):
-        self.last_options = ctx.master.options
-        self.load_script()
 
     def configure(self, options, updated):
         self.last_options = options
@@ -181,10 +99,8 @@ class Script:
                 os.path.dirname(self.path) or "."
             )
             self.observer.start()
-        self.run("configure", options, updated)
 
     def done(self):
-        self.run("done")
         self.dead = True
 
 
@@ -200,16 +116,8 @@ class ScriptLoader:
         self.is_running = True
 
     def run_once(self, command, flows):
-        try:
-            sc = Script(command)
-        except ValueError as e:
-            raise ValueError(str(e))
-        sc.load_script()
-        for f in flows:
-            for evt, o in eventsequence.iterate(f):
-                sc.run(evt, o)
-        sc.done()
-        return sc
+        # Returning once we have proper commands
+        raise NotImplementedError
 
     def configure(self, options, updated):
         if "scripts" in updated:

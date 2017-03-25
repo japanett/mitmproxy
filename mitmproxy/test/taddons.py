@@ -1,3 +1,4 @@
+import sys
 import contextlib
 
 import mitmproxy.master
@@ -25,6 +26,10 @@ class RecordingMaster(mitmproxy.master.Master):
         self.addons = TestAddons(self)
         self.events = []
         self.logs = []
+
+    def dump_log(self, outf=sys.stdout):
+        for i in self.logs:
+            print("%s: %s" % (i.level, i.msg), file=outf)
 
     def has_log(self, txt, level=None):
         for i in self.logs:
