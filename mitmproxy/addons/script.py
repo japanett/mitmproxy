@@ -2,6 +2,8 @@ import os
 import importlib
 import threading
 import sys
+import threading
+import types
 
 from mitmproxy import addonmanager
 from mitmproxy import exceptions
@@ -55,7 +57,7 @@ class Script:
         An addon that manages a single script.
     """
     def __init__(self, path):
-        self.name = "scriptmanager:" + path
+        self.name = "reloader:" + path
         self.path = path
         self.ns = None
         self.observer = None
@@ -63,6 +65,7 @@ class Script:
 
         self.last_options = None
         self.should_reload = threading.Event()
+        self.load_script()
 
     def load(self, l):
         try:
