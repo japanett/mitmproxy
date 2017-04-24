@@ -1,34 +1,28 @@
 import os
+import importlib
 import threading
-import types
+import sys
 
 from mitmproxy import addonmanager
 from mitmproxy import exceptions
 from mitmproxy import ctx
-from mitmproxy import eventsequence
 
 import watchdog.events
 from watchdog.observers import polling
 
 
 def load_script(path):
-    with open(path, "rb") as f:
-        try:
-            code = compile(f.read(), path, 'exec')
-        except SyntaxError as e:
-            ctx.log.error(
-                "Script error: %s line %s: %s" % (
-                    e.filename, e.lineno, e.msg
-                )
-            )
-            return
-    ns = {'__file__': os.path.abspath(path)}
-    with addonmanager.safecall(propagate=False):
-        exec(code, ns)
-    ns = types.SimpleNamespace(**ns)
-    if not getattr(ns, "name", None):
-        ns.name = path
-    return ns
+    loader = importlib.machinery.SourceFileLoader(os.path.basename(path), path)
+    try:
+        oldpath = sys.path
+        sys.path.insert(0, os.path.dirname(path))
+        with addonmanager.safecall(propagate=False):
+            m = loader.load_module()
+            if not getattr(m, "name", None):
+                m.name = path
+            return m
+    finally:
+        sys.path[:] = oldpath
 
 
 class ReloadHandler(watchdog.events.FileSystemEventHandler):
@@ -61,7 +55,7 @@ class Script:
         An addon that manages a single script.
     """
     def __init__(self, path):
-        self.name = "reloader:" + path
+        self.name = "scriptmanager:" + path
         self.path = path
         self.ns = None
         self.observer = None
@@ -69,10 +63,12 @@ class Script:
 
         self.last_options = None
         self.should_reload = threading.Event()
-        self.load_script()
 
-    def load_script(self):
-        self.ns = load_script(self.path)
+    def load(self, l):
+        try:
+            self.ns = load_script(self.path)
+        except FileNotFoundError:
+            ctx.log("%s: file not found." % self.path)
 
     @property
     def addons(self):
@@ -90,6 +86,7 @@ class Script:
             if self.ns:
                 self.addons.remove(self.ns)
             self.ns = load_script(self.path)
+            ctx.master.addons.register(self.ns)
             self.configure(self.last_options, self.last_options.keys())
 
     def configure(self, options, updated):
@@ -119,16 +116,8 @@ class ScriptLoader:
         self.is_running = True
 
     def run_once(self, command, flows):
-        try:
-            sc = Script(command)
-        except ValueError as e:
-            raise ValueError(str(e))
-        sc.load_script()
-        for f in flows:
-            for evt, o in eventsequence.iterate(f):
-                sc.run(evt, o)
-        sc.done()
-        return sc
+        # Returning once we have proper commands
+        raise NotImplementedError
 
     def configure(self, options, updated):
         if "scripts" in updated:
@@ -136,8 +125,8 @@ class ScriptLoader:
                 if options.scripts.count(s) > 1:
                     raise exceptions.OptionsError("Duplicate script: %s" % s)
 
-            for a in self.addons:
-                if a.name not in options.scripts:
+            for a in self.addons[:]:
+                if a.path not in options.scripts:
                     ctx.log.info("Un-loading script: %s" % a.name)
                     ctx.master.addons.remove(a)
                     self.addons.remove(a)
@@ -150,7 +139,7 @@ class ScriptLoader:
 
             current = {}
             for a in self.addons:
-                current[a.name] = a
+                current[a.path] = a
 
             ordered = []
             newscripts = []

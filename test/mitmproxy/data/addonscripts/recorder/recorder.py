@@ -3,7 +3,7 @@ from mitmproxy import eventsequence
 from mitmproxy import ctx
 
 
-class CallLogger:
+class Recorder:
     call_log = []
 
     def __init__(self, name = "recorder"):
@@ -21,4 +21,4 @@ class CallLogger:
         raise AttributeError
 
 
-addons = [CallLogger()]
+addons = [Recorder()]

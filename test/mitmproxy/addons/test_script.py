@@ -1,7 +1,6 @@
 import traceback
 import sys
 import time
-import re
 import watchdog.events
 import pytest
 
@@ -14,18 +13,7 @@ from mitmproxy import exceptions
 from mitmproxy import options
 from mitmproxy import proxy
 from mitmproxy import master
-from mitmproxy import utils
 from mitmproxy.addons import script
-
-from ...conftest import skip_not_windows
-
-
-def test_scriptenv():
-    with taddons.context() as tctx:
-        tctx.master.clear()
-        with script.scriptenv():
-            raise ValueError("fooo")
-        assert tctx.master.has_log("fooo", "error")
 
 
 class Called:
@@ -60,7 +48,7 @@ def test_load_script():
     with taddons.context():
         ns = script.load_script(
             tutils.test_data.path(
-                "mitmproxy/data/addonscripts/recorder.py"
+                "mitmproxy/data/addonscripts/recorder/recorder.py"
             )
         )
         assert ns.addons
@@ -69,7 +57,7 @@ def test_load_script():
 def test_script_print_stdout():
     with taddons.context() as tctx:
         with mock.patch('mitmproxy.ctx.log.warn') as mock_warn:
-            with script.scriptenv():
+            with addonmanager.safecall(False):
                 ns = script.load_script(
                     tutils.test_data.path(
                         "mitmproxy/data/addonscripts/print.py"
@@ -84,7 +72,7 @@ class TestScript:
         with taddons.context() as tctx:
             sc = script.Script(
                 tutils.test_data.path(
-                    "mitmproxy/data/addonscripts/recorder.py"
+                    "mitmproxy/data/addonscripts/recorder/recorder.py"
                 )
             )
             tctx.master.addons.add(sc)
@@ -118,15 +106,13 @@ class TestScript:
             sc = script.Script(
                 tutils.test_data.path("mitmproxy/data/addonscripts/error.py")
             )
-            l = addonmanager.Loader(tctx.master)
-            sc.load(l)
+            tctx.master.addons.add(sc)
             f = tflow.tflow(resp=True)
-            sc.request(f)
+            tctx.master.addons.trigger("request", f)
+
             assert tctx.master.logs[0].level == "error"
-            assert len(tctx.master.logs[0].msg.splitlines()) == 6
-            assert re.search(r'addonscripts[\\/]error.py", line \d+, in request', tctx.master.logs[0].msg)
-            assert re.search(r'addonscripts[\\/]error.py", line \d+, in mkerr', tctx.master.logs[0].msg)
-            assert tctx.master.logs[0].msg.endswith("ValueError: Error!\n")
+            tctx.master.has_log("ValueError: Error!")
+            tctx.master.has_log("error.py")
 
     def test_addon(self):
         with taddons.context() as tctx:
@@ -135,11 +121,9 @@ class TestScript:
                     "mitmproxy/data/addonscripts/addon.py"
                 )
             )
-            l = addonmanager.Loader(tctx.master)
-            sc.load(l)
-            tctx.configure(sc)
+            tctx.master.addons.add(sc)
             assert sc.ns.event_log == [
-                'scriptload', 'addonload', 'addonconfigure'
+                'scriptload', 'addonload'
             ]
 
 
@@ -154,35 +138,14 @@ class TestCutTraceback:
             self.raise_(4)
         except RuntimeError:
             tb = sys.exc_info()[2]
-            tb_cut = script.cut_traceback(tb, "test_simple")
+            tb_cut = addonmanager.cut_traceback(tb, "test_simple")
             assert len(traceback.extract_tb(tb_cut)) == 5
 
-            tb_cut2 = script.cut_traceback(tb, "nonexistent")
+            tb_cut2 = addonmanager.cut_traceback(tb, "nonexistent")
             assert len(traceback.extract_tb(tb_cut2)) == len(traceback.extract_tb(tb))
 
 
 class TestScriptLoader:
-    def test_run_once(self):
-        o = options.Options(scripts=[])
-        m = master.Master(o, proxy.DummyServer())
-        sl = script.ScriptLoader()
-        m.addons.add(sl)
-
-        f = tflow.tflow(resp=True)
-        with m.handlecontext():
-            sc = sl.run_once(
-                tutils.test_data.path(
-                    "mitmproxy/data/addonscripts/recorder.py"
-                ), [f]
-            )
-        evts = [i[1] for i in sc.ns.call_log]
-        assert evts == ['load', 'requestheaders', 'request', 'responseheaders', 'response', 'done']
-
-        f = tflow.tflow(resp=True)
-        with m.handlecontext():
-            with pytest.raises(Exception, match="file not found"):
-                sl.run_once("nonexistent", [f])
-
     def test_simple(self):
         o = options.Options(scripts=[])
         m = master.Master(o, proxy.DummyServer())
@@ -191,7 +154,9 @@ class TestScriptLoader:
         assert len(m.addons) == 1
         o.update(
             scripts = [
-                tutils.test_data.path("mitmproxy/data/addonscripts/recorder.py")
+                tutils.test_data.path(
+                    "mitmproxy/data/addonscripts/recorder/recorder.py"
+                )
             ]
         )
         assert len(m.addons) == 1
@@ -214,26 +179,24 @@ class TestScriptLoader:
         sc = script.ScriptLoader()
         with taddons.context() as tctx:
             tctx.master.addons.add(sc)
-            with pytest.raises(exceptions.OptionsError):
-                tctx.configure(
-                    sc,
-                    scripts = ["nonexistent"]
-                )
+            tctx.configure(sc, scripts = ["nonexistent"])
+            tctx.master.has_log("nonexistent: file not found")
 
     def test_order(self):
-        rec = tutils.test_data.path("mitmproxy/data/addonscripts/recorder.py")
+        rec = tutils.test_data.path("mitmproxy/data/addonscripts/recorder")
         sc = script.ScriptLoader()
+        sc.is_running = True
         with taddons.context() as tctx:
             tctx.master.addons.add(sc)
-            sc.running()
             tctx.configure(
                 sc,
                 scripts = [
-                    "%s %s" % (rec, "a"),
-                    "%s %s" % (rec, "b"),
-                    "%s %s" % (rec, "c"),
+                    "%s/a.py" % rec,
+                    "%s/b.py" % rec,
+                    "%s/c.py" % rec,
                 ]
             )
+
             debug = [i.msg for i in tctx.master.logs if i.level == "debug"]
             assert debug == [
                 'a load',
@@ -248,13 +211,14 @@ class TestScriptLoader:
                 'c configure',
                 'c running',
             ]
+
             tctx.master.logs = []
             tctx.configure(
                 sc,
                 scripts = [
-                    "%s %s" % (rec, "c"),
-                    "%s %s" % (rec, "a"),
-                    "%s %s" % (rec, "b"),
+                    "%s/c.py" % rec,
+                    "%s/a.py" % rec,
+                    "%s/b.py" % rec,
                 ]
             )
             debug = [i.msg for i in tctx.master.logs if i.level == "debug"]
@@ -264,15 +228,15 @@ class TestScriptLoader:
             tctx.configure(
                 sc,
                 scripts = [
-                    "%s %s" % (rec, "x"),
-                    "%s %s" % (rec, "a"),
+                    "%s/e.py" % rec,
+                    "%s/a.py" % rec,
                 ]
             )
             debug = [i.msg for i in tctx.master.logs if i.level == "debug"]
             assert debug == [
                 'c done',
                 'b done',
-                'x load',
-                'x configure',
-                'x running',
+                'e load',
+                'e configure',
+                'e running',
             ]

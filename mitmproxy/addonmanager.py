@@ -59,6 +59,8 @@ def safecall(propagate):
     try:
         with contextlib.redirect_stdout(stdout_replacement):
             yield
+    except exceptions.AddonHalt:
+        raise
     except Exception:
         etype, value, tb = sys.exc_info()
         tb = cut_traceback(tb, "scriptenv").tb_next
@@ -126,18 +128,21 @@ class AddonManager:
 
     def register(self, addon):
         """
-            Register an addon with the manager without adding it to the chain.
-            This should be used by addons that dynamically manage addons. Must
-            be called within a current context.
+            Register an addon and all its sub-addons with the manager without
+            adding it to the chain. This should be used by addons that
+            dynamically manage addons. Must be called within a current context.
         """
+        for a in self._traverse([addon]):
+            name = _get_name(a)
+            if name in self.lookup:
+                raise exceptions.AddonError(
+                    "An addon called '%s' already exists." % name
+                )
         l = Loader(self.master)
         self.invoke_addon(addon, "load", l)
-        name = _get_name(addon)
-        if name in self.lookup:
-            raise exceptions.AddonError(
-                "An addon called '%s' already exists." % name
-            )
-        self.lookup[name] = addon
+        for a in self._traverse([addon]):
+            name = _get_name(a)
+            self.lookup[name] = a
         return addon
 
     def add(self, *addons):
@@ -148,9 +153,6 @@ class AddonManager:
         with self.master.handlecontext():
             for i in addons:
                 self.chain.append(self.register(i))
-                if hasattr(i, "addons"):
-                    for sub in self._traverse(i.addons):
-                        self.register(sub)
 
     def remove(self, addon):
         """
@@ -166,8 +168,8 @@ class AddonManager:
                 raise exceptions.AddonError("No such addon: %s" % n)
             self.chain = [i for i in self.chain if i is not a]
             del self.lookup[_get_name(a)]
-            with self.master.handlecontext():
-                self.invoke_addon(a, "done")
+        with self.master.handlecontext():
+            self.invoke_addon(a, "done")
 
     def __len__(self):
         return len(self.chain)
@@ -203,8 +205,8 @@ class AddonManager:
 
     def invoke_addon(self, addon, name, *args, **kwargs):
         """
-            Invoke an event on an addon. This method must run within an
-            established handler context.
+            Invoke an event on an addon and all its children. This method must
+            run within an established handler context.
         """
         if not ctx.master:
             raise exceptions.AddonError(
@@ -212,21 +214,23 @@ class AddonManager:
             )
         if name not in eventsequence.Events:
             name = "event_" + name
-        func = getattr(addon, name, None)
-        if func:
-            if not callable(func):
-                raise exceptions.AddonError(
-                    "Addon handler %s not callable" % name
-                )
-            func(*args, **kwargs)
+        for a in self._traverse([addon]):
+            func = getattr(a, name, None)
+            if func:
+                if not callable(func):
+                    raise exceptions.AddonError(
+                        "Addon handler %s not callable" % name
+                    )
+                func(*args, **kwargs)
 
     def trigger(self, name, *args, **kwargs):
         """
             Establish a handler context and trigger an event across all addons
         """
         with self.master.handlecontext():
-            for i in self._traverse(self.chain):
+            for i in self.chain:
                 try:
-                    self.invoke_addon(i, name, *args, **kwargs)
+                    with safecall(False):
+                        self.invoke_addon(i, name, *args, **kwargs)
                 except exceptions.AddonHalt:
                     return

@@ -5,6 +5,7 @@ from mitmproxy import exceptions
 from mitmproxy import options
 from mitmproxy import master
 from mitmproxy import proxy
+from mitmproxy.test import taddons
 from mitmproxy.test import tflow
 
 
@@ -71,33 +72,30 @@ def test_lifecycle():
 
 
 def test_simple():
-    o = options.Options()
-    m = master.Master(o, proxy.DummyServer(o))
-    a = addonmanager.AddonManager(m)
-    with pytest.raises(exceptions.AddonError):
-        a.invoke_addon(TAddon("one"), "done")
+    with taddons.context() as tctx:
+        a = tctx.master.addons
 
-    assert len(a) == 0
-    a.add(TAddon("one"))
-    assert a.get("one")
-    assert not a.get("two")
-    assert len(a) == 1
-    a.clear()
-    assert len(a) == 0
-    assert not a.chain
+        assert len(a) == 0
+        a.add(TAddon("one"))
+        assert a.get("one")
+        assert not a.get("two")
+        assert len(a) == 1
+        a.clear()
+        assert len(a) == 0
+        assert not a.chain
 
-    a.add(TAddon("one"))
-    a.trigger("done")
-    with pytest.raises(exceptions.AddonError):
+        a.add(TAddon("one"))
+        a.trigger("done")
         a.trigger("tick")
+        tctx.master.has_log("not callable")
 
-    a.remove(a.get("one"))
-    assert not a.get("one")
+        a.remove(a.get("one"))
+        assert not a.get("one")
 
-    ta = TAddon("one")
-    a.add(ta)
-    a.trigger("custom")
-    assert ta.custom_called
+        ta = TAddon("one")
+        a.add(ta)
+        a.trigger("custom")
+        assert ta.custom_called
 
 
 def test_load_option():
