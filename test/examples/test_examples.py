@@ -3,7 +3,6 @@ from mitmproxy import contentviews
 from mitmproxy import proxy
 from mitmproxy import master
 from mitmproxy.addons import script
-from mitmproxy import addonmanager
 
 from mitmproxy.test import tflow
 from mitmproxy.test import tutils
