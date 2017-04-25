@@ -62,13 +62,16 @@ def safecall(propagate):
     except exceptions.AddonHalt:
         raise
     except Exception:
-        etype, value, tb = sys.exc_info()
-        tb = cut_traceback(tb, "scriptenv").tb_next
-        ctx.log.error(
-            "Addon error: %s" % "".join(
-                traceback.format_exception(etype, value, tb)
+        if propagate:
+            raise
+        else:
+            etype, value, tb = sys.exc_info()
+            tb = cut_traceback(tb, "scriptenv").tb_next
+            ctx.log.error(
+                "Addon error: %s" % "".join(
+                    traceback.format_exception(etype, value, tb)
+                )
             )
-        )
 
 
 class Loader:
@@ -95,6 +98,16 @@ class Loader:
         )
 
 
+def traverse(chain):
+    """
+        Recursively traverse an addon chain.
+    """
+    for a in chain:
+        yield a
+        if hasattr(a, "addons"):
+            yield from traverse(a.addons)
+
+
 class AddonManager:
     def __init__(self, master):
         self.lookup = {}
@@ -104,12 +117,6 @@ class AddonManager:
 
     def _configure_all(self, options, updated):
         self.trigger("configure", options, updated)
-
-    def _traverse(self, chain):
-        for a in chain:
-            yield a
-            if hasattr(a, "addons"):
-                yield from self._traverse(a.addons)
 
     def clear(self):
         """
@@ -132,7 +139,7 @@ class AddonManager:
             adding it to the chain. This should be used by addons that
             dynamically manage addons. Must be called within a current context.
         """
-        for a in self._traverse([addon]):
+        for a in traverse([addon]):
             name = _get_name(a)
             if name in self.lookup:
                 raise exceptions.AddonError(
@@ -140,7 +147,7 @@ class AddonManager:
                 )
         l = Loader(self.master)
         self.invoke_addon(addon, "load", l)
-        for a in self._traverse([addon]):
+        for a in traverse([addon]):
             name = _get_name(a)
             self.lookup[name] = a
         return addon
@@ -162,7 +169,7 @@ class AddonManager:
             parent addon - it's the parent's responsibility to remove it from
             its own addons attribute.
         """
-        for a in self._traverse([addon]):
+        for a in traverse([addon]):
             n = _get_name(a)
             if n not in self.lookup:
                 raise exceptions.AddonError("No such addon: %s" % n)
@@ -214,7 +221,7 @@ class AddonManager:
             )
         if name not in eventsequence.Events:
             name = "event_" + name
-        for a in self._traverse([addon]):
+        for a in traverse([addon]):
             func = getattr(a, name, None)
             if func:
                 if not callable(func):

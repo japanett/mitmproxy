@@ -6,6 +6,7 @@ import mitmproxy.options
 from mitmproxy import proxy
 from mitmproxy import addonmanager
 from mitmproxy import eventsequence
+from mitmproxy.addons import script
 
 
 class TestAddons(addonmanager.AddonManager):
@@ -56,10 +57,11 @@ class context:
         provides a number of helper methods for common testing scenarios.
     """
     def __init__(self, master = None, options = None):
-        self.options = options or mitmproxy.options.Options()
+        options = options or mitmproxy.options.Options()
         self.master = master or RecordingMaster(
             options, proxy.DummyServer(options)
         )
+        self.options = self.master.options
         self.wrapped = None
 
     def __enter__(self):
@@ -94,4 +96,17 @@ class context:
         """
         with self.options.rollback(kwargs.keys(), reraise=True):
             self.options.update(**kwargs)
-            addon.configure(self.options, kwargs.keys())
+            self.master.addons.invoke_addon(
+                addon,
+                "configure",
+                self.options,
+                kwargs.keys()
+            )
+
+    def script(self, path):
+        sc = script.Script(path)
+        loader = addonmanager.Loader(self.master)
+        sc.load(loader)
+        for a in addonmanager.traverse(sc.addons):
+            getattr(a, "load", lambda x: None)(loader)
+        return sc

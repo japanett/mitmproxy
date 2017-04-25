@@ -187,7 +187,6 @@ class TestScriptLoader:
         sc = script.ScriptLoader()
         sc.is_running = True
         with taddons.context() as tctx:
-            tctx.master.addons.add(sc)
             tctx.configure(
                 sc,
                 scripts = [
@@ -200,16 +199,17 @@ class TestScriptLoader:
             debug = [i.msg for i in tctx.master.logs if i.level == "debug"]
             assert debug == [
                 'a load',
-                'a configure',
                 'a running',
 
                 'b load',
-                'b configure',
                 'b running',
 
                 'c load',
-                'c configure',
                 'c running',
+
+                'a configure',
+                'b configure',
+                'c configure',
             ]
 
             tctx.master.logs = []
@@ -222,7 +222,11 @@ class TestScriptLoader:
                 ]
             )
             debug = [i.msg for i in tctx.master.logs if i.level == "debug"]
-            assert debug == []
+            assert debug == [
+                'c configure',
+                'a configure',
+                'b configure',
+            ]
 
             tctx.master.logs = []
             tctx.configure(
@@ -232,11 +236,13 @@ class TestScriptLoader:
                     "%s/a.py" % rec,
                 ]
             )
+
             debug = [i.msg for i in tctx.master.logs if i.level == "debug"]
             assert debug == [
                 'c done',
                 'b done',
                 'e load',
-                'e configure',
                 'e running',
+                'e configure',
+                'a configure',
             ]

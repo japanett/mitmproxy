@@ -162,7 +162,4 @@ class ScriptLoader:
                 if self.is_running:
                     # If we're already running, we configure and tell the addon
                     # we're up and running.
-                    ctx.master.addons.invoke_addon(
-                        s, "configure", options, options.keys()
-                    )
                     ctx.master.addons.invoke_addon(s, "running")
