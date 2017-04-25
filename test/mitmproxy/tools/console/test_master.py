@@ -42,12 +42,6 @@ class TestMaster(tservers.MasterTest):
                 pass
             assert len(m.view) == i
 
-    def test_run_script_once(self):
-        m = self.mkmaster()
-        f = tflow.tflow(resp=True)
-        m.run_script_once("nonexistent", [f])
-        assert any("Input error" in str(l) for l in m.logbuffer)
-
     def test_intercept(self):
         """regression test for https://github.com/mitmproxy/mitmproxy/issues/1605"""
         m = self.mkmaster(intercept="~b bar")

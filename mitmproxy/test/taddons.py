@@ -82,11 +82,13 @@ class context:
         """
         f.reply._state = "start"
         for evt, arg in eventsequence.iterate(f):
-            h = getattr(addon, evt, None)
-            if h:
-                h(arg)
-                if f.reply.state == "taken":
-                    return
+            self.master.addons.invoke_addon(
+                addon,
+                evt,
+                arg
+            )
+            if f.reply.state == "taken":
+                return
 
     def configure(self, addon, **kwargs):
         """
