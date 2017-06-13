@@ -1,6 +1,7 @@
 import typing
 from mitmproxy.tools.console import commandeditor
 from mitmproxy.tools.console import signals
+import ruamel.yaml
 
 
 Contexts = {
@@ -32,14 +33,41 @@ class Binding:
     def sortkey(self):
         return self.key + ",".join(self.contexts)
 
+    @classmethod
+    def from_dict(klass, d):
+        return klass(**d)
+
+    def to_dict(self, strip=False):
+        cmd = self.command
+        if strip:
+            cmd = cmd.strip()
+        return dict(
+            key=self.key,
+            command=cmd,
+            contexts=self.contexts,
+            help=self.help
+        )
+
+    def __eq__(self, other):
+        return self.to_dict(True) == other.to_dict(True)
+
 
 class Keymap:
     def __init__(self, master):
         self.executor = commandeditor.CommandExecutor(master)
         self.keys = {}
-        for c in Contexts:
-            self.keys[c] = {}
         self.bindings = []
+        self._update()
+
+    def _update(self):
+        self.keys = {i: {} for i in Contexts}
+        for idx, b in enumerate(self.bindings[:]):
+            if b.contexts:
+                for c in b.contexts:
+                    self.keys[c][b.keyspec()] = b
+            else:
+                del self.bindings[idx]
+        signals.keybindings_change.send(self)
 
     def _check_contexts(self, contexts):
         if not contexts:
@@ -47,6 +75,10 @@ class Keymap:
         for c in contexts:
             if c not in Contexts:
                 raise ValueError("Unsupported context: %s" % c)
+
+    def bulk(self, bindings):
+        for b in bindings:
+            self.add(**b.to_dict())
 
     def add(
         self,
@@ -59,20 +91,16 @@ class Keymap:
             Add a key to the key map.
         """
         self._check_contexts(contexts)
-
         for b in self.bindings:
             if b.key == key and b.command.strip() == command.strip():
                 b.contexts = sorted(list(set(b.contexts + contexts)))
                 if help:
                     b.help = help
-                self.bind(b)
                 break
         else:
-            self.remove(key, contexts)
             b = Binding(key=key, command=command, contexts=contexts, help=help)
             self.bindings.append(b)
-            self.bind(b)
-        signals.keybindings_change.send(self)
+        self._update()
 
     def remove(self, key: str, contexts: typing.Sequence[str]) -> None:
         """
@@ -82,24 +110,10 @@ class Keymap:
         for c in contexts:
             b = self.get(c, key)
             if b:
-                self.unbind(b)
+                # Modify the binding in place. If this gives an empty context,
+                # it will be removed in _update.
                 b.contexts = [x for x in b.contexts if x != c]
-                if b.contexts:
-                    self.bindings.append(b)
-                    self.bind(b)
-        signals.keybindings_change.send(self)
-
-    def bind(self, binding: Binding) -> None:
-        for c in binding.contexts:
-            self.keys[c][binding.keyspec()] = binding
-
-    def unbind(self, binding: Binding) -> None:
-        """
-            Unbind also removes the binding from the list.
-        """
-        for c in binding.contexts:
-            del self.keys[c][binding.keyspec()]
-            self.bindings = [b for b in self.bindings if b != binding]
+        self._update()
 
     def get(self, context: str, key: str) -> typing.Optional[Binding]:
         if context in self.keys:
@@ -122,3 +136,23 @@ class Keymap:
         if b:
             return self.executor(b.command)
         return key
+
+    def dump(self) -> str:
+        bindings = []
+        for b in self.list("all"):
+            bindings.append(b.to_dict())
+        unbindings = []
+        data = {}
+        if bindings:
+            data["bind"] = bindings
+        if unbindings:
+            data["unbind"] = unbindings
+        return ruamel.yaml.dump(data)
+
+    def load(self, inp: str) -> None:
+        d = ruamel.yaml.safe_load(inp)
+        print(d)
+        for bd in d.get("bind", []):
+            print(Binding.from_dict(bd))
+        for bd in d.get("unbind", []):
+            print(bd)

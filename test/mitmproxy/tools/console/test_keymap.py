@@ -1,4 +1,5 @@
 from mitmproxy.tools.console import keymap
+from mitmproxy.tools.console import defaultkeys
 from mitmproxy.test import taddons
 from unittest import mock
 import pytest
@@ -70,3 +71,13 @@ def test_remove():
 
         km.remove("key", ["commands"])
         assert len(km.bindings) == 0
+
+
+def test_dump():
+    with taddons.context() as tctx:
+        km = keymap.Keymap(tctx.master)
+        defaultkeys.map(km)
+
+        dat = km.dump()
+        km.load(dat)
+

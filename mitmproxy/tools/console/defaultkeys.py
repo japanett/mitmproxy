@@ -1,41 +1,43 @@
+from mitmproxy.tools.console import keymap
 
-def map(km):
-    km.add(":", "console.command ", ["global"], "Command prompt")
-    km.add("?", "console.view.help", ["global"], "View help")
-    km.add("C", "console.view.commands", ["global"], "View commands")
-    km.add("K", "console.view.keybindings", ["global"], "View key bindings")
-    km.add("O", "console.view.options", ["global"], "View options")
-    km.add("E", "console.view.eventlog", ["global"], "View event log")
-    km.add("Q", "console.exit", ["global"], "Exit immediately")
-    km.add("q", "console.view.pop", ["global"], "Exit the current view")
-    km.add("-", "console.layout.cycle", ["global"], "Cycle to next layout")
-    km.add("shift tab", "console.panes.next", ["global"], "Focus next layout pane")
-    km.add("P", "console.view.flow @focus", ["global"], "View flow details")
 
-    km.add("g", "console.nav.start", ["global"], "Go to start")
-    km.add("G", "console.nav.end", ["global"], "Go to end")
-    km.add("k", "console.nav.up", ["global"], "Up")
-    km.add("j", "console.nav.down", ["global"], "Down")
-    km.add("l", "console.nav.right", ["global"], "Right")
-    km.add("h", "console.nav.left", ["global"], "Left")
-    km.add("tab", "console.nav.next", ["global"], "Next")
-    km.add("enter", "console.nav.select", ["global"], "Select")
-    km.add("space", "console.nav.pagedown", ["global"], "Page down")
-    km.add("ctrl f", "console.nav.pagedown", ["global"], "Page down")
-    km.add("ctrl b", "console.nav.pageup", ["global"], "Page up")
+bindings = [
+    keymap.Binding(":", "console.command ", ["global"], "Command prompt"),
+    keymap.Binding("?", "console.view.help", ["global"], "View help"),
+    keymap.Binding("C", "console.view.commands", ["global"], "View commands"),
+    keymap.Binding("K", "console.view.keybindings", ["global"], "View key bindings"),
+    keymap.Binding("O", "console.view.options", ["global"], "View options"),
+    keymap.Binding("E", "console.view.eventlog", ["global"], "View event log"),
+    keymap.Binding("Q", "console.exit", ["global"], "Exit immediately"),
+    keymap.Binding("q", "console.view.pop", ["global"], "Exit the current view"),
+    keymap.Binding("-", "console.layout.cycle", ["global"], "Cycle to next layout"),
+    keymap.Binding("shift tab", "console.panes.next", ["global"], "Focus next layout pane"),
+    keymap.Binding("P", "console.view.flow @focus", ["global"], "View flow details"),
 
-    km.add("i", "console.command set intercept=", ["global"], "Set intercept")
-    km.add("W", "console.command set save_stream_file=", ["global"], "Stream to file")
-    km.add("A", "flow.resume @all", ["flowlist", "flowview"], "Resume all intercepted flows")
-    km.add("a", "flow.resume @focus", ["flowlist", "flowview"], "Resume this intercepted flow")
-    km.add(
+    keymap.Binding("g", "console.nav.start", ["global"], "Go to start"),
+    keymap.Binding("G", "console.nav.end", ["global"], "Go to end"),
+    keymap.Binding("k", "console.nav.up", ["global"], "Up"),
+    keymap.Binding("j", "console.nav.down", ["global"], "Down"),
+    keymap.Binding("l", "console.nav.right", ["global"], "Right"),
+    keymap.Binding("h", "console.nav.left", ["global"], "Left"),
+    keymap.Binding("tab", "console.nav.next", ["global"], "Next"),
+    keymap.Binding("enter", "console.nav.select", ["global"], "Select"),
+    keymap.Binding("space", "console.nav.pagedown", ["global"], "Page down"),
+    keymap.Binding("ctrl f", "console.nav.pagedown", ["global"], "Page down"),
+    keymap.Binding("ctrl b", "console.nav.pageup", ["global"], "Page up"),
+
+    keymap.Binding("i", "console.command set intercept=", ["global"], "Set intercept"),
+    keymap.Binding("W", "console.command set save_stream_file=", ["global"], "Stream to file"),
+    keymap.Binding("A", "flow.resume @all", ["flowlist", "flowview"], "Resume all intercepted flows"),
+    keymap.Binding("a", "flow.resume @focus", ["flowlist", "flowview"], "Resume this intercepted flow"),
+    keymap.Binding(
         "b", "console.command cut.save s.content|@focus ''",
         ["flowlist", "flowview"],
         "Save response body to file"
-    )
-    km.add("d", "view.remove @focus", ["flowlist", "flowview"], "Delete flow from view")
-    km.add("D", "view.duplicate @focus", ["flowlist", "flowview"], "Duplicate flow")
-    km.add(
+    ),
+    keymap.Binding("d", "view.remove @focus", ["flowlist", "flowview"], "Delete flow from view"),
+    keymap.Binding("D", "view.duplicate @focus", ["flowlist", "flowview"], "Duplicate flow"),
+    keymap.Binding(
         "e",
         """
         console.choose.cmd Format export.formats
@@ -43,25 +45,25 @@ def map(km):
         """,
         ["flowlist", "flowview"],
         "Export this flow to file"
-    )
-    km.add("f", "console.command set view_filter=", ["flowlist"], "Set view filter")
-    km.add("F", "set console_focus_follow=toggle", ["flowlist"], "Set focus follow")
-    km.add(
+    ),
+    keymap.Binding("f", "console.command set view_filter=", ["flowlist"], "Set view filter"),
+    keymap.Binding("F", "set console_focus_follow=toggle", ["flowlist"], "Set focus follow"),
+    keymap.Binding(
         "ctrl l",
         "console.command cut.clip ",
         ["flowlist", "flowview"],
         "Send cuts to clipboard"
-    )
-    km.add("L", "console.command view.load ", ["flowlist"], "Load flows from file")
-    km.add("m", "flow.mark.toggle @focus", ["flowlist"], "Toggle mark on this flow")
-    km.add("M", "view.marked.toggle", ["flowlist"], "Toggle viewing marked flows")
-    km.add(
+    ),
+    keymap.Binding("L", "console.command view.load ", ["flowlist"], "Load flows from file"),
+    keymap.Binding("m", "flow.mark.toggle @focus", ["flowlist"], "Toggle mark on this flow"),
+    keymap.Binding("M", "view.marked.toggle", ["flowlist"], "Toggle viewing marked flows"),
+    keymap.Binding(
         "n",
         "console.command view.create get https://google.com",
         ["flowlist"],
         "Create a new flow"
-    )
-    km.add(
+    ),
+    keymap.Binding(
         "o",
         """
         console.choose.cmd Order view.order.options
@@ -69,24 +71,24 @@ def map(km):
         """,
         ["flowlist"],
         "Set flow list order"
-    )
-    km.add("r", "replay.client @focus", ["flowlist", "flowview"], "Replay this flow")
-    km.add("S", "console.command replay.server ", ["flowlist"], "Start server replay")
-    km.add("v", "set console_order_reversed=toggle", ["flowlist"], "Reverse flow list order")
-    km.add("U", "flow.mark @all false", ["flowlist"], "Un-set all marks")
-    km.add("w", "console.command save.file @shown ", ["flowlist"], "Save listed flows to file")
-    km.add("V", "flow.revert @focus", ["flowlist", "flowview"], "Revert changes to this flow")
-    km.add("X", "flow.kill @focus", ["flowlist"], "Kill this flow")
-    km.add("z", "view.remove @all", ["flowlist"], "Clear flow list")
-    km.add("Z", "view.remove @hidden", ["flowlist"], "Purge all flows not showing")
-    km.add(
+    ),
+    keymap.Binding("r", "replay.client @focus", ["flowlist", "flowview"], "Replay this flow"),
+    keymap.Binding("S", "console.command replay.server ", ["flowlist"], "Start server replay"),
+    keymap.Binding("v", "set console_order_reversed=toggle", ["flowlist"], "Reverse flow list order"),
+    keymap.Binding("U", "flow.mark @all false", ["flowlist"], "Un-set all marks"),
+    keymap.Binding("w", "console.command save.file @shown ", ["flowlist"], "Save listed flows to file"),
+    keymap.Binding("V", "flow.revert @focus", ["flowlist", "flowview"], "Revert changes to this flow"),
+    keymap.Binding("X", "flow.kill @focus", ["flowlist"], "Kill this flow"),
+    keymap.Binding("z", "view.remove @all", ["flowlist"], "Clear flow list"),
+    keymap.Binding("Z", "view.remove @hidden", ["flowlist"], "Purge all flows not showing"),
+    keymap.Binding(
         "|",
         "console.command script.run @focus ",
         ["flowlist", "flowview"],
         "Run a script on this flow"
-    )
+    ),
 
-    km.add(
+    keymap.Binding(
         "e",
         """
         console.choose.cmd Part console.edit.focus.options
@@ -94,17 +96,17 @@ def map(km):
         """,
         ["flowview"],
         "Edit a flow component"
-    )
-    km.add(
+    ),
+    keymap.Binding(
         "f",
         "view.setval.toggle @focus fullcontents",
         ["flowview"],
         "Toggle viewing full contents on this flow",
-    )
-    km.add("w", "console.command save.file @focus ", ["flowview"], "Save flow to file")
-    km.add("space", "view.focus.next", ["flowview"], "Go to next flow")
+    ),
+    keymap.Binding("w", "console.command save.file @focus ", ["flowview"], "Save flow to file"),
+    keymap.Binding("space", "view.focus.next", ["flowview"], "Go to next flow"),
 
-    km.add(
+    keymap.Binding(
         "v",
         """
         console.choose "View Part" request,response
@@ -112,10 +114,10 @@ def map(km):
         """,
         ["flowview"],
         "View flow body in an external viewer"
-    )
-    km.add("p", "view.focus.prev", ["flowview"], "Go to previous flow")
-    km.add("m", "console.flowview.mode.set", ["flowview"], "Set flow view mode")
-    km.add(
+    ),
+    keymap.Binding("p", "view.focus.prev", ["flowview"], "Go to previous flow"),
+    keymap.Binding("m", "console.flowview.mode.set", ["flowview"], "Set flow view mode"),
+    keymap.Binding(
         "z",
         """
         console.choose "Part" request,response
@@ -123,33 +125,33 @@ def map(km):
         """,
         ["flowview"],
         "Encode/decode flow body"
-    )
+    ),
 
-    km.add("L", "console.command options.load ", ["options"], "Load from file")
-    km.add("S", "console.command options.save ", ["options"], "Save to file")
-    km.add("D", "options.reset", ["options"], "Reset all options")
-    km.add("d", "console.options.reset.focus", ["options"], "Reset this option")
+    keymap.Binding("L", "console.command options.load ", ["options"], "Load from file"),
+    keymap.Binding("S", "console.command options.save ", ["options"], "Save to file"),
+    keymap.Binding("D", "options.reset", ["options"], "Reset all options"),
+    keymap.Binding("d", "console.options.reset.focus", ["options"], "Reset this option"),
 
-    km.add("a", "console.grideditor.add", ["grideditor"], "Add a row after cursor")
-    km.add("A", "console.grideditor.insert", ["grideditor"], "Insert a row before cursor")
-    km.add("d", "console.grideditor.delete", ["grideditor"], "Delete this row")
-    km.add(
+    keymap.Binding("a", "console.grideditor.add", ["grideditor"], "Add a row after cursor"),
+    keymap.Binding("A", "console.grideditor.insert", ["grideditor"], "Insert a row before cursor"),
+    keymap.Binding("d", "console.grideditor.delete", ["grideditor"], "Delete this row"),
+    keymap.Binding(
         "r",
         "console.command console.grideditor.readfile",
         ["grideditor"],
         "Read unescaped data from file"
-    )
-    km.add(
+    ),
+    keymap.Binding(
         "R",
         "console.command console.grideditor.readfile_escaped",
         ["grideditor"],
         "Read a Python-style escaped string from file"
-    )
-    km.add("e", "console.grideditor.editor", ["grideditor"], "Edit in external editor")
+    ),
+    keymap.Binding("e", "console.grideditor.editor", ["grideditor"], "Edit in external editor"),
 
-    km.add("z", "console.eventlog.clear", ["eventlog"], "Clear")
+    keymap.Binding("z", "console.eventlog.clear", ["eventlog"], "Clear"),
 
-    km.add(
+    keymap.Binding(
         "a",
         """
         console.choose.cmd "Context" console.key.contexts
@@ -157,22 +159,23 @@ def map(km):
         """,
         ["keybindings"],
         "Add a key binding"
-    )
-    km.add(
+    ),
+    keymap.Binding(
         "d",
         "console.key.unbind.focus",
         ["keybindings"],
         "Unbind the currently focused key binding"
-    )
-    km.add(
+    ),
+    keymap.Binding(
         "x",
         "console.key.execute.focus",
         ["keybindings"],
         "Execute the currently focused key binding"
-    )
-    km.add(
+    ),
+    keymap.Binding(
         "enter",
         "console.key.edit.focus",
         ["keybindings"],
         "Edit the currently focused key binding"
-    )
+    ),
+]

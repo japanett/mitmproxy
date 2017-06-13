@@ -41,7 +41,7 @@ class ConsoleMaster(master.Master):
         # This line is just for type hinting
         self.options = self.options  # type: Options
         self.keymap = keymap.Keymap(self)
-        defaultkeys.map(self.keymap)
+        self.keymap.bulk(defaultkeys.bindings)
         self.options.errored.connect(self.options_error)
 
         self.view_stack = []
